@@ -396,6 +396,9 @@ struct SHMEM {
 
 t_stat sim_shmem_open (const char *name, size_t size, SHMEM **shmem, void **addr)
 {
+	size_t name_len = strlen(name) + 1;
+	wchar_t wname[name_len];
+	mbstowcs(wname, name, name_len);
 *shmem = (SHMEM *)calloc (1, sizeof(**shmem));
 
 if (*shmem == NULL)
@@ -404,7 +407,7 @@ if (*shmem == NULL)
 (*shmem)->hMapping = INVALID_HANDLE_VALUE;
 (*shmem)->shm_size = size;
 (*shmem)->shm_base = NULL;
-(*shmem)->hMapping = CreateFileMappingA (INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, (DWORD)size, name);
+(*shmem)->hMapping = CreateFileMappingW (INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, (DWORD)size, wname);
 if ((*shmem)->hMapping == INVALID_HANDLE_VALUE) {
     sim_shmem_close (*shmem);
     *shmem = NULL;

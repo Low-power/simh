@@ -48,7 +48,10 @@
 
 #if defined (_WIN32)                                    /* Windows */
 #include <winsock2.h>
-
+#include <windows.h>
+#ifdef _WIN32_WCE
+#define GetProcAddress GetProcAddressA
+#endif
 #elif !defined (__OS2__) || defined (__EMX__)           /* VMS, Mac, Unix, OS/2 EMX */
 #define WSAGetLastError()       errno                   /* Windows macros */
 #define WSASetLastError(err) errno = err

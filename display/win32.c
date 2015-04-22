@@ -385,7 +385,7 @@ ws_sync(void) {
 
 void
 ws_beep(void) {
-#if 0
+#ifdef _WIN32_WCE
     /* play SystemDefault sound; does not work over terminal service */
     MessageBeep(MB_OK);
 #else

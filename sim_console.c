@@ -131,6 +131,12 @@
 #include <ctype.h>
 #ifdef _WIN32
 #include <windows.h>
+#ifdef _WIN32_WCE
+#include <winioctl.h>
+#ifndef IOCTL_CONSOLE_SETCONTROLCHANDLER
+#define IOCTL_CONSOLE_SETCONTROLCHANDLER CTL_CODE(FILE_DEVICE_CONSOLE, 8, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+#endif
 #endif
  
 #ifdef __HAIKU__
@@ -2433,7 +2439,9 @@ static DWORD saved_mode;
 static BOOL WINAPI
 ControlHandler(DWORD dwCtrlType)
     {
+#ifndef _WIN32_WCE
     DWORD Mode;
+#endif
     extern void int_handler (int sig);
 
     switch (dwCtrlType)
@@ -2442,6 +2450,7 @@ ControlHandler(DWORD dwCtrlType)
         case CTRL_C_EVENT:          // SERVICE_CONTROL_STOP in debug mode
             int_handler(0);
             return TRUE;
+#ifndef _WIN32_WCE
         case CTRL_CLOSE_EVENT:      // Window is Closing
         case CTRL_LOGOFF_EVENT:     // User is logging off
             if (!GetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), &Mode))
@@ -2449,12 +2458,18 @@ ControlHandler(DWORD dwCtrlType)
         case CTRL_SHUTDOWN_EVENT:   // System is shutting down
             int_handler(0);
             return TRUE;
+#endif
         }
     return FALSE;
     }
 
 static t_stat sim_os_ttinit (void)
 {
+#ifdef _WIN32_WCE
+unsigned long int ioctlrsize;
+DeviceIoControl((void *)STDIN_FILENO, IOCTL_CONSOLE_SETCONTROLCHANDLER, ControlHandler, sizeof ControlHandler, NULL, 0, &ioctlrsize, NULL);
+return SCPE_OK;		// Ignore errors
+#else
 SetConsoleCtrlHandler( ControlHandler, TRUE );
 std_input = GetStdHandle (STD_INPUT_HANDLE);
 std_output = GetStdHandle (STD_OUTPUT_HANDLE);
@@ -2462,15 +2477,18 @@ if ((std_input) &&                                      /* Not Background proces
     (std_input != INVALID_HANDLE_VALUE))
     GetConsoleMode (std_input, &saved_mode);            /* Save Mode */
 return SCPE_OK;
+#endif
 }
 
 static t_stat sim_os_ttrun (void)
 {
 if ((std_input) &&                                      /* If Not Background process? */
-    (std_input != INVALID_HANDLE_VALUE) &&
-    (!GetConsoleMode(std_input, &saved_mode) ||         /* Set mode to RAW */
-     !SetConsoleMode(std_input, RAW_MODE)))
-    return SCPE_TTYERR;
+    (std_input != INVALID_HANDLE_VALUE)
+#ifndef _WIN32_WCE
+   && (!GetConsoleMode(std_input, &saved_mode) ||         /* Set mode to RAW */
+     !SetConsoleMode(std_input, RAW_MODE))
+#endif
+    ) return SCPE_TTYERR;
 if (sim_log) {
     fflush (sim_log);
 #ifndef _WIN32_WCE	/* POSIX IO in Windows CE is always in binary mode */
@@ -2504,9 +2522,14 @@ return SCPE_OK;
 
 static t_bool sim_os_ttisatty (void)
 {
+#ifdef _WIN32_WCE
+// Using celibc
+return isatty(STDIN_FILENO);
+#else
 DWORD Mode;
 
 return (std_input) && (std_input != INVALID_HANDLE_VALUE) && GetConsoleMode (std_input, &Mode);
+#endif
 }
 
 static t_stat sim_os_poll_kbd (void)

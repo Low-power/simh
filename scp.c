@@ -4618,8 +4618,10 @@ if (sim_is_running)
 if ((!cptr) || (*cptr == 0))
     return SCPE_2FARG;
 sim_trim_endspc(cptr);
+#ifndef _WIN32_WCE
 if (chdir(cptr) != 0)
     return sim_messagef(SCPE_IOERR, "Unable to directory change to: %s\n", cptr);
+#endif
 return SCPE_OK;
 }
 
@@ -10270,7 +10272,7 @@ char *tmpnam;
 do {
     int fd;
     tmpnam = _tempnam (NULL, "simh");
-    fd = _open (tmpnam, _O_CREAT | _O_RDWR | _O_EXCL, _S_IREAD | _S_IWRITE);
+    fd = open(tmpnam, _O_CREAT | _O_RDWR | _O_EXCL, _S_IREAD | _S_IWRITE);
     if (fd != -1) {
         tmp = _fdopen (fd, "w+");
         break;

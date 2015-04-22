@@ -80,6 +80,9 @@ Internal routines:
 
 #ifdef _WIN32
 #include <windows.h>
+#ifdef _WIN32_WCE
+#define GetProcAddress GetProcAddressA
+#endif
 #endif
 #if defined SIM_ASYNCH_IO
 #include <pthread.h>
@@ -1467,8 +1470,8 @@ if (sim_deb && (ctx->dptr->dctrl & reason)) {
 
 
 /* OS Specific RAW Disk I/O support */
-
-#if defined _WIN32
+// Not implemented in Windows CE
+#if defined _WIN32 && !defined _WIN32_WCE
 
 static void _set_errno_from_status (DWORD dwStatus)
 {
@@ -3087,7 +3090,7 @@ RPC_STATUS
 
 if (!UuidCreate_c) {
     HINSTANCE hDll;
-    hDll = LoadLibraryA("rpcrt4.dll");
+    hDll = LoadLibraryW(L"rpcrt4.dll");
     UuidCreate_c = (RPC_STATUS (RPC_ENTRY *) (void *))GetProcAddress(hDll, "UuidCreate");
     }
 if (UuidCreate_c)
@@ -3302,6 +3305,9 @@ ExpandToFullPath (const char *szFileSpec,
                   char *szFullFileSpecBuffer,
                   size_t BufferSize)
 {
+#ifdef _WIN32_WCE
+strncpy(szFullFileSpecBuffer, szFileSpec, BufferSize);
+#else
 char *c;
 #ifdef _WIN32
 for (c = strchr (szFullFileSpecBuffer, '/'); c; c = strchr (szFullFileSpecBuffer, '/'))
@@ -3320,6 +3326,7 @@ else
 if ((c = strstr (szFullFileSpecBuffer, "]/")))
     memcpy (c+1, c+2, strlen(c+2)+1);
 memset (szFullFileSpecBuffer + strlen (szFullFileSpecBuffer), 0, BufferSize - strlen (szFullFileSpecBuffer));
+#endif
 #endif
 }
 
