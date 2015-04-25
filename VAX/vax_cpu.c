@@ -3212,8 +3212,14 @@ if (M == NULL) {                        /* first time init? */
         return SCPE_IERR;
     pcq_r->qptr = 0;
     M = (uint32 *) calloc (((uint32) MEMSIZE) >> 2, sizeof (uint32));
-    if (M == NULL)
+//	uint32 size = (((uint32)MEMSIZE) >> 2) * sizeof(uint32);
+//	M = (uint32 *)malloc(size);
+    if (M == NULL) {
+		fprintf(stderr, "cpu_reset: calloc(%u, %u) failed\n", ((uint32)MEMSIZE) >> 2, sizeof(uint32));
+//		fprintf(stderr, "cpu_reset: malloc(%u) failed\n", size);
         return SCPE_MEM;
+    }
+//	memset(M, 0, size);
     auto_config(NULL, 0);               /* do an initial auto configure */
     }
 return build_dib_tab ();

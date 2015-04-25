@@ -827,7 +827,13 @@ t_bool created = FALSE, copied = FALSE;
 t_bool auto_format = FALSE;
 t_offset capac;
 
+fprintf(stderr, "function: sim_disk_attach(%p, %p<%s>, %lu, %lu, %s, %u, %p<%s>, %u, %d)\n",
+	uptr, cptr, cptr, (unsigned long int)sector_size, (unsigned long int)xfer_element_size,
+	dontautosize ? "true" : "false", dbit, dtype, dtype, pdp11tracksize, completion_delay);
+//printf("uptr->flags = 0x%x\n", uptr->flags);
+
 if (uptr->flags & UNIT_DIS)                             /* disabled? */
+//	puts("disabled");
     return SCPE_UDIS;
 if (!(uptr->flags & UNIT_ATTABLE))                      /* not attachable? */
     return SCPE_NOATT;

@@ -1921,9 +1921,14 @@ static t_stat view_cmd (int32 flag, char *cptr)
 {
 #ifdef _WIN32
 	char cmdline[256];
-
+#ifdef _WIN32_WCE
+	// The system function is from celibc; this way is read only, user can't edit the file
+	sprintf(cmdline, "type %s & pause", cptr);
+	system(cmdline);
+#else
 	sprintf(cmdline, "notepad %s", cptr);
 	WinExec(cmdline, SW_SHOWNORMAL);
+#endif
 #endif
 	return SCPE_OK;
 }

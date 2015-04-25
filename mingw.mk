@@ -62,6 +62,8 @@ endif
 OS_CCDEFS += -fms-extensions $(PTHREADS_CCDEFS)
 OS_LDFLAGS += -lm $(PTHREADS_LDFLAGS)
 ifdef WCE
+# Need some console API from port.dll
+OS_LDFLAGS += -lport
 OS_LDFLAGS += -lc -lws2 -lmmtimer
 else
 OS_LDFLAGS += -lwsock32 -lwinmm
@@ -90,7 +92,9 @@ ifneq ($(DEBUG),)
   CFLAGS_O = -O0
   BUILD_FEATURES = - debugging support
 else
-  CFLAGS_O = -O1
+  ifndef WCE
+    CFLAGS_O = -O1
+  endif
 endif
 
 

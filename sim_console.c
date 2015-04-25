@@ -1234,7 +1234,7 @@ else {
     }
 
 if (sim_rem_master_mode) {
-    t_stat stat_nomessage;
+    t_stat stat_nomessage = 0;
 
     sim_printf ("Command input starting on Master Remote Console Session\n");
     stat = sim_run_boot_prep ();

@@ -5025,7 +5025,13 @@ t_stat reason;
 GET_SWITCHES (cptr);                                    /* get switches */
 if (*cptr == 0)                                         /* must be more */
     return SCPE_2FARG;
-cptr = get_glyph_nc (cptr, gbuf, 0);                    /* get file name */
+cptr = get_glyph_quoted(cptr, gbuf, 0);                    /* get file name */
+if(*gbuf == '\"') {
+	size_t len = strlen(gbuf) - 2;
+	memmove(gbuf, gbuf + 1, len);
+	gbuf[len] = 0;
+}
+fprintf(stderr, "gbuf: \"%s\"\n", gbuf);
 loadfile = sim_fopen (gbuf, flag? "wb": "rb");          /* open for wr/rd */
 if (loadfile == NULL)
     return SCPE_OPENERR;
@@ -5046,6 +5052,8 @@ char gbuf[CBUFSIZE];
 DEVICE *dptr;
 UNIT *uptr;
 t_stat r;
+
+fprintf(stderr, "function: attach_cmd(%d, %p<%s>)\n", flag, cptr, cptr);
 
 GET_SWITCHES (cptr);                                    /* get switches */
 if (*cptr == 0)                                         /* must be more */
@@ -5072,6 +5080,11 @@ if (uptr->flags & UNIT_ATT) {                           /* already attached? */
         }
     }
 sim_trim_endspc (cptr);                                 /* trim trailing spc */
+if(*cptr == '\"') {
+	size_t len = strlen(cptr) - 2;
+	memmove(cptr, cptr + 1, len);
+	cptr[len] = 0;
+}
 return scp_attach_unit (dptr, uptr, cptr);              /* attach */
 }
 
@@ -5079,6 +5092,7 @@ return scp_attach_unit (dptr, uptr, cptr);              /* attach */
 
 t_stat scp_attach_unit (DEVICE *dptr, UNIT *uptr, char *cptr)
 {
+fprintf(stderr, "function: scp_attach_unit(%p, %p, %p<%s>)\n", dptr, uptr, cptr, cptr);
 if (dptr->attach != NULL)                               /* device routine? */
     return dptr->attach (uptr, cptr);                   /* call it */
 return attach_unit (uptr, cptr);                        /* no, std routine */
@@ -7720,6 +7734,8 @@ char *svptr, gbuf[CBUFSIZE];
 DEVICE *tdptr;
 UNIT *tuptr;
 
+fprintf(stderr, "function: get_sim_opt(%d, %p<%s>, %p)\n", opt, cptr, cptr, st);
+
 sim_switches = 0;                                       /* no switches */
 sim_ofile = NULL;                                       /* no output file */
 sim_schrptr = NULL;                                     /* no search */
@@ -10272,7 +10288,13 @@ char *tmpnam;
 do {
     int fd;
     tmpnam = _tempnam (NULL, "simh");
+#if !defined _WIN32_WCE && defined _MSC_VER
+#define open _open
+#endif
     fd = open(tmpnam, _O_CREAT | _O_RDWR | _O_EXCL, _S_IREAD | _S_IWRITE);
+#if !defined _WIN32_WCE && defined _MSC_VER
+#undef open
+#endif
     if (fd != -1) {
         tmp = _fdopen (fd, "w+");
         break;

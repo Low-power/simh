@@ -2195,10 +2195,14 @@ static t_stat pcr_open_controller (char *devname)
 	COMMTIMEOUTS cto;
 	DWORD nerr;
 
+	size_t len = strlen(devname) + 1;
+	wchar_t wname[len];
+	mbstowcs(wname, devname, len);
+
 	if (hpcr != INVALID_HANDLE_VALUE)
 		return SCPE_OK;
 													/* open the COM port */
-	hpcr = CreateFile(devname, GENERIC_READ|GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
+	hpcr = CreateFileW(wname, GENERIC_READ|GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
 	if (hpcr == INVALID_HANDLE_VALUE)
 		return SCPE_OPENERR;
 
@@ -2294,13 +2298,14 @@ static void pcr_xio_sense (int modify)
 		DEBUG_PRINT("#CR Sense %04x%s%s", cr_dsw, (modify & 1) ? " RESET0" : "", (modify & 2) ? " RESET4" : "");
 }
 
+#ifndef _WIN32_WCE
 /* report_error - issue detailed report of Windows IO error */
 
 static void report_error (char *msg, DWORD err)
 {
 	char *lpMessageBuffer = NULL;
 		
-	FormatMessage(
+	FormatMessageA(
 	  FORMAT_MESSAGE_ALLOCATE_BUFFER |
 	  FORMAT_MESSAGE_FROM_SYSTEM,
 	  NULL,
@@ -2315,13 +2320,14 @@ static void report_error (char *msg, DWORD err)
 
 	LocalFree(lpMessageBuffer);
 }
+#endif
 
 /* pcr_thread - thread to handle card reader interface communications */
 
 static DWORD CALLBACK pcr_thread (LPVOID arg)
 {
 	DWORD event;
-	long nrcvd, nread, nwritten;
+	long int nrcvd, nread, nwritten;
 	HANDLE objs[4];
 	BOOL pick_queued = FALSE, reset_queued = FALSE;
 
@@ -2357,19 +2363,27 @@ static DWORD CALLBACK pcr_thread (LPVOID arg)
 		switch (event) {
 			case WAIT_OBJECT_0+0:						/* read complete */
 				ResetEvent(ovRd.hEvent);
-				if (! GetOverlappedResult(hpcr, &ovRd, &nrcvd, TRUE))
+#ifndef _WIN32_WCE
+				if (! GetOverlappedResult(hpcr, &ovRd, &nrcvd, TRUE)) {
 					report_error("PCR_Read", GetLastError());
-				else if (cr_unit.flags & UNIT_DEBUG)
-					printf("PCR_Read: event, %d rcvd\n", nrcvd);
+				} else
+#endif
+				if (cr_unit.flags & UNIT_DEBUG) {
+					printf("PCR_Read: event, %ld rcvd\n", nrcvd);
+				}
 				break;
 
 			case WAIT_OBJECT_0+1:						/* write complete */
 				nwritten = 0;
 				ResetEvent(ovWr.hEvent);
-				if (! GetOverlappedResult(hpcr, &ovWr, &nwritten, TRUE))
+#ifndef _WIN32_WCE
+				if (! GetOverlappedResult(hpcr, &ovWr, &nwritten, TRUE)) {
 					report_error("PCR_Write", GetLastError());
-				else if (cr_unit.flags & UNIT_DEBUG)
-					printf("PCR_Write: event, %d sent\n", nwritten);
+				} else
+#endif
+				if (cr_unit.flags & UNIT_DEBUG) {
+					printf("PCR_Write: event, %ld sent\n", nwritten);
+				}
 				continue;
 
 			case WAIT_OBJECT_0+2:						/* reset request from simulator */
@@ -2434,7 +2448,7 @@ static DWORD CALLBACK pcr_thread (LPVOID arg)
 						pcr_state  = PCR_STATE_WAIT_DATA;
 						ovRd.Offset = ovRd.OffsetHigh = 0;
 						nread = 20;						/* initiate a read */
-						ReadFile(hpcr, ((char *) readstation), nread, &nrcvd, &ovRd);
+						ReadFile(hpcr, ((char *) readstation), nread, (unsigned long int *)&nrcvd, &ovRd);
 						break;
 
 					case '!':							/* ! means pick has been canceled, status will be coming next */
@@ -2451,7 +2465,7 @@ static DWORD CALLBACK pcr_thread (LPVOID arg)
 
 			case PCR_STATE_WAIT_DATA:					/* waiting for data from P command */
 				if (cr_unit.flags & UNIT_DEBUG)
-					printf((nrcvd <= 0) ? "PCR: NO RESP!\n" : "PCR: GOT %d BYTES\n", nrcvd);
+					printf((nrcvd <= 0) ? "PCR: NO RESP!\n" : "PCR: GOT %ld BYTES\n", nrcvd);
 
 				if (nrcvd > 0) {
 					pcr_nleft -= nrcvd;
@@ -2464,7 +2478,7 @@ static DWORD CALLBACK pcr_thread (LPVOID arg)
 				if (pcr_nleft > 0) {
 					ovRd.Offset = ovRd.OffsetHigh = 0;
 					nread = min(pcr_nleft, 20);
-					ReadFile(hpcr, ((char *) readstation)+160-pcr_nleft, nread, &nrcvd, &ovRd);
+					ReadFile(hpcr, ((char *) readstation)+160-pcr_nleft, nread, (unsigned long int *)&nrcvd, &ovRd);
 				}
 				else {
 					pcr_state = PCR_STATE_WAIT_PICK_FINAL_RESPONSE;
@@ -2492,7 +2506,7 @@ static DWORD CALLBACK pcr_thread (LPVOID arg)
 
 static void pcr_cmd (char cmd)
 {
-	long nwritten, nrcvd;
+	long int nwritten, nrcvd;
 	int status;
 
 	if (cmd != '\0') {
@@ -2503,13 +2517,13 @@ static void pcr_cmd (char cmd)
 
 		ResetEvent(ovWr.hEvent);
 		ovWr.Offset = ovWr.OffsetHigh = 0;
-		status = WriteFile(hpcr, &cmd, 1, &nwritten, &ovWr);
+		status = WriteFile(hpcr, &cmd, 1, (unsigned long int *)&nwritten, &ovWr);
 		if (status == 0 && GetLastError() != ERROR_IO_PENDING)
 			printf("Error initiating write in pcr_cmd\n");
 	}
 
 	ovRd.Offset = ovRd.OffsetHigh = 0;
-	status = ReadFile(hpcr, &response_byte, 1, &nrcvd, &ovRd);		/* if no bytes ready, just return -- a later wait-event will catch it */
+	status = ReadFile(hpcr, &response_byte, 1, (unsigned long int *)&nrcvd, &ovRd);		/* if no bytes ready, just return -- a later wait-event will catch it */
 	if (status == 0 && GetLastError() != ERROR_IO_PENDING)
 		printf("Error initiating read in pcr_cmd\n");
 

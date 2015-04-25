@@ -1373,6 +1373,8 @@ int32 drv, i, p;
 t_stat r;
 DEVICE *dptr = find_dev_from_unit (uptr);
 
+fprintf(stderr, "function: rp_attach(%p, %p<%s>)\n", uptr, cptr, cptr);
+
 uptr->capac = drv_tab[GET_DTYPE (uptr->flags)].size;
 r = sim_disk_attach (uptr, cptr, RP_NUMWD * sizeof (uint16), 
                      sizeof (uint16), TRUE, 0, 

@@ -237,7 +237,13 @@ typedef uint32          t_addr;
 #endif
 
 #if defined (_WIN32)
+#if defined _WIN32_WNT_NATIVE
+#define NULL_DEVICE "/Device/Null"
+#elif defined _WIN32_WCE
+#define NULL_DEVICE "NULL:"
+#else
 #define NULL_DEVICE "NUL:"
+#endif
 #elif defined (_VMS)
 #define NULL_DEVICE "NL:"
 #else
