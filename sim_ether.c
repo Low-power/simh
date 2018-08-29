@@ -373,6 +373,9 @@
 #include <direct.h>
 #else
 #include <unistd.h>
+#ifdef __SVR4
+#include <sys/filio.h>
+#endif
 #endif
 
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
@@ -1072,7 +1075,7 @@ static const char* lib_name =
 #else
 #define __STR_QUOTE(tok) #tok
 #define __STR(tok) __STR_QUOTE(tok)
-                          "libpcap." __STR(HAVE_DLOPEN);
+                          "libpcap." __STR(HAVE_DLOPEN) ".0.8";
 #endif
 static const char* no_pcap = 
 #if defined(_WIN32) || defined(__CYGWIN__)
@@ -1154,6 +1157,10 @@ int load_pcap(void) {
         }
 #else
       hLib = dlopen(lib_name, RTLD_NOW);
+#endif
+#if !defined _WIN32 && !defined __APPLE__
+      if (hLib == 0) hLib = dlopen("libpcap.so.1", RTLD_NOW);
+      if (hLib == 0) hLib = dlopen("libpcap.so", RTLD_NOW);
 #endif
       if (hLib == 0) {
         /* failed to load DLL */
@@ -2035,7 +2042,13 @@ if (0 == strncmp("tap:", savname, 4)) {
   if (1) {
     char dev_name[64] = "";
 
-    snprintf(dev_name, sizeof(dev_name)-1, "/dev/%s", devname);
+    snprintf(dev_name, sizeof(dev_name)-1,
+#ifndef __SVR4
+	"/dev/ipnet/%s"
+#else
+	"/dev/%s"
+#endif
+	, devname);
     dev_name[sizeof(dev_name)-1] = '\0';
 
     if ((tun = open(dev_name, O_RDWR)) >= 0) {
@@ -2068,8 +2081,10 @@ if (0 == strncmp("tap:", savname, 4)) {
         }
 #endif
       }
-    else
-      strncpy(errbuf, strerror(errno), PCAP_ERRBUF_SIZE-1);
+    else {
+      //strncpy(errbuf, strerror(errno), PCAP_ERRBUF_SIZE-1);
+	snprintf(errbuf, PCAP_ERRBUF_SIZE-1, "open: %s: %s", dev_name, strerror(errno));
+    }
   }
 #else
   strncpy(errbuf, "No support for tap: devices", PCAP_ERRBUF_SIZE-1);

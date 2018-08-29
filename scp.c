@@ -8221,15 +8221,17 @@ if (prompt && (!initialized)) {
 
 #define S__STR_QUOTE(tok) #tok
 #define S__STR(tok) S__STR_QUOTE(tok)
-    handle = dlopen("libncurses." S__STR(HAVE_DLOPEN), RTLD_NOW|RTLD_GLOBAL);
-    handle = dlopen("libcurses." S__STR(HAVE_DLOPEN), RTLD_NOW|RTLD_GLOBAL);
-    handle = dlopen("libreadline." S__STR(HAVE_DLOPEN), RTLD_NOW|RTLD_GLOBAL);
-    if (!handle)
-        handle = dlopen("libreadline." S__STR(HAVE_DLOPEN) ".7", RTLD_NOW|RTLD_GLOBAL);
-    if (!handle)
-        handle = dlopen("libreadline." S__STR(HAVE_DLOPEN) ".6", RTLD_NOW|RTLD_GLOBAL);
-    if (!handle)
-        handle = dlopen("libreadline." S__STR(HAVE_DLOPEN) ".5", RTLD_NOW|RTLD_GLOBAL);
+    // Always try version suffixed library names at first
+    handle = dlopen("libncurses." S__STR(HAVE_DLOPEN) ".5", RTLD_NOW|RTLD_GLOBAL);
+    if(!handle) handle = dlopen("libncurses." S__STR(HAVE_DLOPEN), RTLD_NOW|RTLD_GLOBAL);
+/*
+    handle = dlopen("libcurses." S__STR(HAVE_DLOPEN) ".1", RTLD_NOW|RTLD_GLOBAL);
+    if(!handle) handle = dlopen("libcurses." S__STR(HAVE_DLOPEN), RTLD_NOW|RTLD_GLOBAL);
+*/
+    handle = dlopen("libreadline." S__STR(HAVE_DLOPEN) ".7", RTLD_NOW|RTLD_GLOBAL);
+    if (!handle) handle = dlopen("libreadline." S__STR(HAVE_DLOPEN) ".6", RTLD_NOW|RTLD_GLOBAL);
+    if (!handle) handle = dlopen("libreadline." S__STR(HAVE_DLOPEN) ".5", RTLD_NOW|RTLD_GLOBAL);
+    if(!handle) handle = dlopen("libreadline." S__STR(HAVE_DLOPEN), RTLD_NOW|RTLD_GLOBAL);
     if (handle) {
         p_readline = (readline_func)((size_t)dlsym(handle, "readline"));
         p_add_history = (add_history_func)((size_t)dlsym(handle, "add_history"));
