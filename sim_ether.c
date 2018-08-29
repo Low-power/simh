@@ -971,6 +971,8 @@ void eth_show_dev (FILE* st, ETH_DEV* dev)
   {}
 static int _eth_get_system_id (char *buf, size_t buf_size)
   {memset (buf, 0, buf_size); return 0;}
+t_stat sim_ether_test (DEVICE *dptr)
+  {return SCPE_OK;}
 #else    /* endif unimplemented */
 
 const char *eth_capabilities(void)
@@ -4032,5 +4034,10 @@ if (dev->bpf_filter)
 if (dev->eth_api == ETH_API_NAT)
   sim_slirp_show ((SLIRP *)dev->handle, st);
 #endif
+}
+
+t_stat sim_ether_test (DEVICE *dptr)
+{
+return SCPE_OK;
 }
 #endif /* USE_NETWORK */

@@ -483,8 +483,7 @@ typedef struct {
 
 /* IO parameters */
 
-#define DZ_MUXES        4                               /* max # of DZ muxes */
-#define DZ_LINES        8                               /* lines per DZ mux */
+#define DZ_MUXES        4                               /* default # of DZ muxes */
 #define VH_MUXES        4                               /* max # of VH muxes */
 #define DLX_LINES       16                              /* max # of KL11/DL11's */
 #define DCX_LINES       16                              /* max # of DC11's */
@@ -886,7 +885,7 @@ extern UNIT cpu_unit;
 #define WrMemW(pa,d)    uc15_WrMemW (pa, d)
 #define WrMemB(pa, d)   uc15_WrMemB (pa, d)
 
-uint32 uc15_memsize;
+extern uint32 uc15_memsize;
 int32 uc15_RdMemW (int32 pa);
 int32 uc15_RdMemB (int32 pa);
 void uc15_WrMemW (int32 pa, int32 d);

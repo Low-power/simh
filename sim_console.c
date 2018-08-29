@@ -2155,8 +2155,8 @@ t_stat sim_show_cons_speed (FILE *st, DEVICE *dptr, UNIT *uptr, int32 flag, CONS
 {
 if (sim_con_ldsc.rxbps) {
     fprintf (st, "Speed = %d", sim_con_ldsc.rxbps);
-    if (sim_con_ldsc.rxbpsfactor != TMXR_RX_BPS_UNIT_SCALE)
-        fprintf (st, "*%.0f", sim_con_ldsc.rxbpsfactor/TMXR_RX_BPS_UNIT_SCALE);
+    if (sim_con_ldsc.bpsfactor != 1.0)
+        fprintf (st, "*%.0f", sim_con_ldsc.bpsfactor);
     fprintf (st, " bps\n");
     }
 return SCPE_OK;
@@ -2239,7 +2239,15 @@ if (r != SCPE_OK)
 
 sim_deb_switches = sim_switches;                        /* save debug switches */
 if (sim_deb_switches & SWMASK ('R')) {
+    struct tm loc_tm, gmt_tm;
+    time_t time_t_now;
+
     clock_gettime(CLOCK_REALTIME, &sim_deb_basetime);
+    time_t_now = (time_t)sim_deb_basetime.tv_sec;
+    /* Adjust the relative timebase to reflect the localtime GMT offset */
+    loc_tm = *localtime (&time_t_now);
+    gmt_tm = *gmtime (&time_t_now);
+    sim_deb_basetime.tv_sec -= mktime (&gmt_tm) - mktime (&loc_tm);
     if (!(sim_deb_switches & (SWMASK ('A') | SWMASK ('T'))))
         sim_deb_switches |= SWMASK ('T');
     }
@@ -2251,6 +2259,10 @@ if (!sim_quiet) {
         sim_printf ("   Debug messages display time of day as hh:mm:ss.msec%s\n", sim_deb_switches & SWMASK ('R') ? " relative to the start of debugging" : "");
     if (sim_deb_switches & SWMASK ('A'))
         sim_printf ("   Debug messages display time of day as seconds.msec%s\n", sim_deb_switches & SWMASK ('R') ? " relative to the start of debugging" : "");
+    if (sim_deb_switches & SWMASK ('F'))
+        sim_printf ("   Debug messages will not be filtered to summarize duplicate lines\n");
+    if (sim_deb_switches & SWMASK ('E'))
+        sim_printf ("   Debug messages containing blob data in EBCDIC will display in readable form\n");
     time(&now);
     fprintf (sim_deb, "Debug output to \"%s\" at %s", sim_logfile_name (sim_deb, sim_deb_ref), ctime(&now));
     show_version (sim_deb, NULL, NULL, 0, NULL);
@@ -2258,34 +2270,6 @@ if (!sim_quiet) {
 if (sim_deb_switches & SWMASK ('N'))
     sim_deb_switches &= ~SWMASK ('N');          /* Only process the -N flag initially */
 
-return SCPE_OK;
-}
-
-t_stat sim_debug_flush (void)
-{
-int32 saved_quiet = sim_quiet;
-int32 saved_sim_switches = sim_switches;
-int32 saved_deb_switches = sim_deb_switches;
-struct timespec saved_deb_basetime = sim_deb_basetime;
-char saved_debug_filename[CBUFSIZE];
-
-if (sim_deb == NULL)                                    /* no debug? */
-    return SCPE_OK;
-
-if (sim_deb == sim_log) {                               /* debug is log */
-    fflush (sim_deb);                                   /* fflush is the best we can do */
-    return SCPE_OK;
-    }
-
-strcpy (saved_debug_filename, sim_logfile_name (sim_deb, sim_deb_ref));
-
-sim_quiet = 1;
-sim_set_deboff (0, NULL);
-sim_switches = saved_deb_switches;
-sim_set_debon (0, saved_debug_filename);
-sim_deb_basetime = saved_deb_basetime;
-sim_switches = saved_sim_switches;
-sim_quiet = saved_quiet;
 return SCPE_OK;
 }
 
@@ -2322,18 +2306,38 @@ if (sim_deb) {
         fprintf (st, "   Debug messages display time of day as hh:mm:ss.msec%s\n", sim_deb_switches & SWMASK ('R') ? " relative to the start of debugging" : "");
     if (sim_deb_switches & SWMASK ('A'))
         fprintf (st, "   Debug messages display time of day as seconds.msec%s\n", sim_deb_switches & SWMASK ('R') ? " relative to the start of debugging" : "");
+    if (sim_deb_switches & SWMASK ('F'))
+        fprintf (st, "   Debug messages are not being filtered to summarize duplicate lines\n");
+    if (sim_deb_switches & SWMASK ('E'))
+        fprintf (st, "   Debug messages containing blob data in EBCDIC will display in readable form\n");
     for (i = 0; (dptr = sim_devices[i]) != NULL; i++) {
+        t_bool unit_debug = FALSE;
+        uint32 unit;
+
+        for (unit = 0; unit < dptr->numunits; unit++)
+            if (dptr->units[unit].dctrl) {
+                unit_debug = TRUE;
+                break;
+                }
         if (!(dptr->flags & DEV_DIS) &&
             ((dptr->flags & DEV_DEBUG) || (dptr->debflags)) &&
-            (dptr->dctrl)) {
+            ((dptr->dctrl) || unit_debug)) {
             fprintf (st, "Device: %-6s ", dptr->name);
             show_dev_debug (st, dptr, NULL, 0, NULL);
             }
         }
     for (i = 0; sim_internal_device_count && (dptr = sim_internal_devices[i]); ++i) {
+        t_bool unit_debug = FALSE;
+        uint32 unit;
+
+        for (unit = 0; unit < dptr->numunits; unit++)
+            if (dptr->units[unit].dctrl) {
+                unit_debug = TRUE;
+                break;
+                }
         if (!(dptr->flags & DEV_DIS) &&
             ((dptr->flags & DEV_DEBUG) || (dptr->debflags)) &&
-            (dptr->dctrl)) {
+            ((dptr->dctrl) || unit_debug)) {
             fprintf (st, "Device: %-6s ", dptr->name);
             show_dev_debug (st, dptr, NULL, 0, NULL);
             }
@@ -2775,7 +2779,7 @@ if (!sim_rem_master_mode) {
         (sim_con_ldsc.serport == 0)) {                      /* and not serial? */
         if (c && sim_con_ldsc.rxbps)                        /* got something && rate limiting? */
             sim_con_ldsc.rxnexttime =                       /* compute next input time */
-                floor (sim_gtime () + ((sim_con_ldsc.rxdelta * sim_timer_inst_per_sec ())/sim_con_ldsc.rxbpsfactor));
+                floor (sim_gtime () + ((sim_con_ldsc.rxdeltausecs * sim_timer_inst_per_sec ()) / USECS_PER_SECOND));
         if (c)
             sim_debug (DBG_RCV, &sim_con_telnet, "sim_poll_kbd() returning: '%c' (0x%02X)\n", sim_isprint (c & 0xFF) ? c & 0xFF : '.', c);
         return c;                                           /* in-window */
@@ -2836,9 +2840,7 @@ if (!sim_con_ldsc.conn) {                               /* no Telnet or serial c
     if (tmxr_poll_conn (&sim_con_tmxr) >= 0)            /* poll connect */
         sim_con_ldsc.rcve = 1;                          /* rcv enabled */
     }
-if (sim_con_ldsc.xmte == 0)                             /* xmt disabled? */
-    r = SCPE_STALL;
-else r = tmxr_putc_ln (&sim_con_ldsc, c);               /* no, Telnet output */
+r = tmxr_putc_ln (&sim_con_ldsc, c);                    /* Telnet output */
 tmxr_poll_tx (&sim_con_tmxr);                           /* poll xmt */
 return r;                                               /* return status */
 }
@@ -3157,6 +3159,8 @@ unsigned int status;
 IOSB iosb;
 $DESCRIPTOR (terminal_device, "tt");
 
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttinit()\n");
+
 status = sys$assign (&terminal_device, &tty_chan, 0, 0);
 if (status != SS$_NORMAL)
     return SCPE_TTIERR;
@@ -3175,6 +3179,8 @@ static t_stat sim_os_ttrun (void)
 unsigned int status;
 IOSB iosb;
 
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttrun()\n");
+
 status = sys$qiow (EFN, tty_chan, IO$_SETMODE, &iosb, 0, 0,
     &run_mode, sizeof (run_mode), 0, 0, 0, 0);
 if ((status != SS$_NORMAL) || (iosb.status != SS$_NORMAL))
@@ -3186,6 +3192,8 @@ static t_stat sim_os_ttcmd (void)
 {
 unsigned int status;
 IOSB iosb;
+
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttcmd() - BSDTTY\n");
 
 status = sys$qiow (EFN, tty_chan, IO$_SETMODE, &iosb, 0, 0,
     &cmd_mode, sizeof (cmd_mode), 0, 0, 0, 0);
@@ -3234,6 +3242,8 @@ return (buf[0] | SCPE_KFLAG);
 static t_stat sim_os_poll_kbd (void)
 {
 t_stat response;
+
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_poll_kbd()\n");
 
 if (response = buffered_character) {
     buffered_character = 0;
@@ -3329,6 +3339,8 @@ ControlHandler(DWORD dwCtrlType)
 
 static t_stat sim_os_ttinit (void)
 {
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttinit()\n");
+
 SetConsoleCtrlHandler( ControlHandler, TRUE );
 std_input = GetStdHandle (STD_INPUT_HANDLE);
 std_output = GetStdHandle (STD_OUTPUT_HANDLE);
@@ -3343,6 +3355,8 @@ return SCPE_OK;
 
 static t_stat sim_os_ttrun (void)
 {
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttrun()\n");
+
 if ((sim_ttisatty ()) &&
     (std_input) &&                                      /* If Not Background process? */
     (std_input != INVALID_HANDLE_VALUE)) {
@@ -3368,6 +3382,8 @@ return SCPE_OK;
 
 static t_stat sim_os_ttcmd (void)
 {
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttcmd() - BSDTTY\n");
+
 if (sim_log) {
     fflush (sim_log);
     _setmode (_fileno (sim_log), _O_TEXT);
@@ -3554,6 +3570,8 @@ static t_stat sim_os_poll_kbd (void)
 {
 int c;
 
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_poll_kbd()\n");
+
 #if defined (__EMX__)
 switch (c = _read_kbd(0,0,0)) {                         /* EMX has _read_kbd */
 
@@ -3713,8 +3731,12 @@ int ps_getch(void) {
 
 /* Note that this only works if the call to sim_ttinit comes before any output to the console */
 
-static t_stat sim_os_ttinit (void) {
+static t_stat sim_os_ttinit (void) 
+{
     int i;
+
+    sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttinit()\n");
+
     /* this blank will later be replaced by the number of characters */
     char title[50] = " ";
     unsigned char ptitle[50];
@@ -3731,7 +3753,7 @@ static t_stat sim_os_ttinit (void) {
     title[0] = strlen(title) - 1;                       /* Pascal string done */
     for (i = 0; i <= title[0]; i++) {                   /* copy to unsigned char */
         ptitle[i] = title[i];
-    }
+        }
     SIOUXSetTitle(ptitle);
     return SCPE_OK;
 }
@@ -3759,6 +3781,8 @@ return 1;
 static t_stat sim_os_poll_kbd (void)
 {
 int c;
+
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_poll_kbd()\n");
 
 if (!ps_kbhit ())
     return SCPE_OK;
@@ -3801,7 +3825,9 @@ int cmdfl,runfl;                                        /* TTY flags */
 
 static t_stat sim_os_ttinit (void)
 {
-cmdfl = fcntl (0, F_GETFL, 0);                          /* get old flags  and status */
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttinit() - BSDTTY\n");
+
+cmdfl = fcntl (fileno (stdin), F_GETFL, 0);             /* get old flags  and status */
 runfl = cmdfl | FNDELAY;
 if (ioctl (0, TIOCGETP, &cmdtty) < 0)
     return SCPE_TTIERR;
@@ -3828,6 +3854,8 @@ return SCPE_OK;                                         /* return success */
 
 static t_stat sim_os_ttrun (void)
 {
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttrun() - BSDTTY\n");
+
 runtchars.t_intrc = sim_int_char;                       /* in case changed */
 fcntl (0, F_SETFL, runfl);                              /* non-block mode */
 if (ioctl (0, TIOCSETP, &runtty) < 0)
@@ -3842,6 +3870,8 @@ return SCPE_OK;
 
 static t_stat sim_os_ttcmd (void)
 {
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttcmd() - BSDTTY\n");
+
 sim_os_set_thread_priority (PRIORITY_NORMAL);           /* restore priority */
 fcntl (0, F_SETFL, cmdfl);                              /* block mode */
 if (ioctl (0, TIOCSETP, &cmdtty) < 0)
@@ -3867,6 +3897,8 @@ static t_stat sim_os_poll_kbd (void)
 {
 int status;
 unsigned char buf[1];
+
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_poll_kbd() - BSDTTY\n");
 
 status = read (0, buf, 1);
 if (status != 1) return SCPE_OK;
@@ -3906,13 +3938,24 @@ return SCPE_OK;
 
 #else
 
+#if !defined (__ANDROID_API__) || (__ANDROID_API__ < 26)
+#define TCSETATTR_ACTION TCSAFLUSH
+#else
+#define TCSETATTR_ACTION TCSANOW
+#endif
+
 #include <termios.h>
 #include <unistd.h>
 
 struct termios cmdtty, runtty;
+int cmdfl,runfl;                                        /* TTY flags */
 
 static t_stat sim_os_ttinit (void)
 {
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttinit()\n");
+
+cmdfl = fcntl (fileno (stdin), F_GETFL, 0);             /* get old flags  and status */
+runfl = cmdfl | FNDELAY;
 if (!isatty (fileno (stdin)))                           /* skip if !tty */
     return SCPE_OK;
 if (tcgetattr (0, &cmdtty) < 0)                         /* get old flags */
@@ -3959,14 +4002,17 @@ return SCPE_OK;
 
 static t_stat sim_os_ttrun (void)
 {
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttrun()\n");
+
 if (!isatty (fileno (stdin)))                           /* skip if !tty */
     return SCPE_OK;
+fcntl (fileno (stdin), F_SETFL, runfl);                 /* non-block mode */
 #if defined(USE_SIM_VIDEO) && defined(HAVE_LIBSDL)
 runtty.c_cc[VINTR] = 0;                                 /* OS X doesn't deliver SIGINT to main thread when enabled */
 #else
 runtty.c_cc[VINTR] = sim_int_char;                      /* in case changed */
 #endif
-if (tcsetattr (0, TCSAFLUSH, &runtty) < 0)
+if (tcsetattr (fileno(stdin), TCSETATTR_ACTION, &runtty) < 0)
     return SCPE_TTIERR;
 sim_os_set_thread_priority (PRIORITY_BELOW_NORMAL);     /* try to lower pri */
 return SCPE_OK;
@@ -3974,10 +4020,13 @@ return SCPE_OK;
 
 static t_stat sim_os_ttcmd (void)
 {
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_ttcmd() - BSDTTY\n");
+
 if (!isatty (fileno (stdin)))                           /* skip if !tty */
     return SCPE_OK;
 sim_os_set_thread_priority (PRIORITY_NORMAL);           /* try to raise pri */
-if (tcsetattr (0, TCSAFLUSH, &cmdtty) < 0)
+fcntl (0, F_SETFL, cmdfl);                              /* block mode */
+if (tcsetattr (fileno(stdin), TCSETATTR_ACTION, &cmdtty) < 0)
     return SCPE_TTIERR;
 return SCPE_OK;
 }
@@ -3996,6 +4045,8 @@ static t_stat sim_os_poll_kbd (void)
 {
 int status;
 unsigned char buf[1];
+
+sim_debug (DBG_TRC, &sim_con_telnet, "sim_os_poll_kbd()\n");
 
 status = read (0, buf, 1);
 if (status != 1) return SCPE_OK;
