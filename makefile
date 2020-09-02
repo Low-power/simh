@@ -662,7 +662,7 @@ ifeq ($(WIN32),)  #*nix Environments (&& cygwin)
           endif
           ifeq (cygwin,$(OSTYPE))
             # cygwin has no ldconfig so explicitly specify pcap object library
-            NETWORK_LDFLAGS = -L$(dir $(call find_lib,$(PCAPLIB))) -Wl,-R,$(dir $(call find_lib,$(PCAPLIB))) -l$(PCAPLIB)
+            NETWORK_LDFLAGS = -L$(dir $(call find_lib,$(PCAPLIB))) -l$(PCAPLIB)
           else
             NETWORK_LDFLAGS = -l$(PCAPLIB)
           endif
@@ -714,7 +714,7 @@ ifeq ($(WIN32),)  #*nix Environments (&& cygwin)
             $(info using libpcap: $(call find_lib,$(PCAPLIB)) $(call find_include,pcap))
             ifeq (cygwin,$(OSTYPE))
               NETWORK_CCDEFS = -DUSE_NETWORK -DHAVE_PCAP_NETWORK -I$(dir $(call find_include,pcap)) $(BPF_CONST_STRING)
-              NETWORK_LDFLAGS = -L$(dir $(call find_lib,$(PCAPLIB))) -Wl,-R,$(dir $(call find_lib,$(PCAPLIB))) -l$(PCAPLIB)
+              NETWORK_LDFLAGS = -L$(dir $(call find_lib,$(PCAPLIB))) -l$(PCAPLIB)
               NETWORK_FEATURES = - static networking support using libpcap components located in the cygwin directories
             else
               NETWORK_CCDEFS := -DUSE_NETWORK -DHAVE_PCAP_NETWORK -isystem -I$(dir $(call find_include,pcap)) $(BPF_CONST_STRING) $(call find_lib,$(PCAPLIB))
@@ -767,11 +767,7 @@ ifeq ($(WIN32),)  #*nix Environments (&& cygwin)
           ifeq (,$(findstring USE_NETWORK,$(NETWORK_CCDEFS))$(findstring USE_SHARED,$(NETWORK_CCDEFS)))
             NETWORK_CCDEFS += -DUSE_NETWORK
           endif
-          ifeq (Darwin,$(OSTYPE))
-            NETWORK_LDFLAGS += -lvdeplug -L$(dir $(call find_lib,vdeplug))
-          else
-            NETWORK_LDFLAGS += -lvdeplug -Wl,-R,$(dir $(call find_lib,vdeplug)) -L$(dir $(call find_lib,vdeplug))
-          endif
+          NETWORK_LDFLAGS += -lvdeplug -L$(dir $(call find_lib,vdeplug))
           $(info using libvdeplug: $(call find_lib,vdeplug) $(call find_include,libvdeplug))
         endif
       endif
